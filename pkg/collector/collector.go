@@ -54,25 +54,6 @@ type VersionInfo struct {
 
 var versionRegex = regexp.MustCompile(`ClamAV+\s([0-9.]*)\/?([0-9.]*)\/?(.*)`)
 
-func GetStat(matches [][]string, index uint) float64 {
-	var (
-		float float64
-		err   error
-	)
-
-	if len(matches) > int(index) && len(matches[index]) > 0 {
-		float, err = strconv.ParseFloat(matches[index][1], 64)
-	} else {
-		float = math.NaN()
-	}
-
-	if err != nil {
-		float = math.NaN()
-	}
-
-	return float
-}
-
 func GetVersionInfo(version_string string) *VersionInfo {
 	versionInfo := VersionInfo{}
 	// remove newlines
@@ -149,6 +130,14 @@ func (collector *Collector) Collect(ch chan<- prometheus.Metric) {
 		ch <- prometheus.MustNewConstMetric(collector.up, prometheus.GaugeValue, 0)
 	}
 
+	float := func(s string) float64 {
+		float, err := strconv.ParseFloat(s, 64)
+		if err != nil {
+			float = math.NaN()
+		}
+		return float
+	}
+
 	stats := collector.client.Dial(commands.STATS)
 	idle, err := regexp.MatchString("IDLE", string(stats))
 	if err != nil {
@@ -157,28 +146,28 @@ func (collector *Collector) Collect(ch chan<- prometheus.Metric) {
 	}
 	regex := regexp.MustCompile(`([0-9.]+|N/A)`)
 	matches := regex.FindAllStringSubmatch(string(stats), -1)
-
-	if len(matches) > 0 {
-		ch <- prometheus.MustNewConstMetric(collector.threadsLive, prometheus.GaugeValue, GetStat(matches, 1))
-		ch <- prometheus.MustNewConstMetric(collector.threadsIdle, prometheus.GaugeValue, GetStat(matches, 2))
-		ch <- prometheus.MustNewConstMetric(collector.threadsMax, prometheus.GaugeValue, GetStat(matches, 3))
-		ch <- prometheus.MustNewConstMetric(collector.queue, prometheus.GaugeValue, GetStat(matches, 5))
+	if len(matches) > 0 && idle == false {
+		ch <- prometheus.MustNewConstMetric(collector.threadsLive, prometheus.GaugeValue, float(matches[1][1]))
+		ch <- prometheus.MustNewConstMetric(collector.threadsIdle, prometheus.GaugeValue, float(matches[2][1]))
+		ch <- prometheus.MustNewConstMetric(collector.threadsMax, prometheus.GaugeValue, float(matches[3][1]))
+		ch <- prometheus.MustNewConstMetric(collector.queue, prometheus.GaugeValue, float(matches[5][1]))
+		ch <- prometheus.MustNewConstMetric(collector.memHeap, prometheus.GaugeValue, float(matches[7][1])*1024)
+		ch <- prometheus.MustNewConstMetric(collector.memMmap, prometheus.GaugeValue, float(matches[8][1])*1024)
+		ch <- prometheus.MustNewConstMetric(collector.memUsed, prometheus.GaugeValue, float(matches[9][1])*1024)
+		ch <- prometheus.MustNewConstMetric(collector.poolsUsed, prometheus.GaugeValue, float(matches[13][1])*1024)
+		ch <- prometheus.MustNewConstMetric(collector.poolsTotal, prometheus.GaugeValue, float(matches[14][1])*1024)
 	}
 
-	if len(matches) > 0 && !idle {
-		ch <- prometheus.MustNewConstMetric(collector.memHeap, prometheus.GaugeValue, GetStat(matches, 7)*1024)
-		ch <- prometheus.MustNewConstMetric(collector.memMmap, prometheus.GaugeValue, GetStat(matches, 8)*1024)
-		ch <- prometheus.MustNewConstMetric(collector.memUsed, prometheus.GaugeValue, GetStat(matches, 9)*1024)
-		ch <- prometheus.MustNewConstMetric(collector.poolsUsed, prometheus.GaugeValue, GetStat(matches, 13)*1024)
-		ch <- prometheus.MustNewConstMetric(collector.poolsTotal, prometheus.GaugeValue, GetStat(matches, 14)*1024)
-	}
-
-	if len(matches) > 0 && idle {
-		ch <- prometheus.MustNewConstMetric(collector.memHeap, prometheus.GaugeValue, GetStat(matches, 8)*1024)
-		ch <- prometheus.MustNewConstMetric(collector.memMmap, prometheus.GaugeValue, GetStat(matches, 9)*1024)
-		ch <- prometheus.MustNewConstMetric(collector.memUsed, prometheus.GaugeValue, GetStat(matches, 10)*1024)
-		ch <- prometheus.MustNewConstMetric(collector.poolsUsed, prometheus.GaugeValue, GetStat(matches, 14)*1024)
-		ch <- prometheus.MustNewConstMetric(collector.poolsTotal, prometheus.GaugeValue, GetStat(matches, 15)*1024)
+	if len(matches) > 0 && idle == true {
+		ch <- prometheus.MustNewConstMetric(collector.threadsLive, prometheus.GaugeValue, float(matches[1][1]))
+		ch <- prometheus.MustNewConstMetric(collector.threadsIdle, prometheus.GaugeValue, float(matches[2][1]))
+		ch <- prometheus.MustNewConstMetric(collector.threadsMax, prometheus.GaugeValue, float(matches[3][1]))
+		ch <- prometheus.MustNewConstMetric(collector.queue, prometheus.GaugeValue, float(matches[5][1]))
+		ch <- prometheus.MustNewConstMetric(collector.memHeap, prometheus.GaugeValue, float(matches[8][1])*1024)
+		ch <- prometheus.MustNewConstMetric(collector.memMmap, prometheus.GaugeValue, float(matches[9][1])*1024)
+		ch <- prometheus.MustNewConstMetric(collector.memUsed, prometheus.GaugeValue, float(matches[10][1])*1024)
+		ch <- prometheus.MustNewConstMetric(collector.poolsUsed, prometheus.GaugeValue, float(matches[14][1])*1024)
+		ch <- prometheus.MustNewConstMetric(collector.poolsTotal, prometheus.GaugeValue, float(matches[15][1])*1024)
 	}
 
 	versionInfo := GetVersionInfo(string(collector.client.Dial(commands.VERSION)))

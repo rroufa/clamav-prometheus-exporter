@@ -45,11 +45,12 @@ func (c Client) Dial(command commands.Command) []byte {
 	}
 	defer conn.Close()
 
-	_, _ = conn.Write([]byte(fmt.Sprintf("%s", command)))
+	_, _ = conn.Write([]byte(command.String()))
 	resp, err := ioutil.ReadAll(conn)
 	if err != nil {
 		log.Errorf("error reading socket response for command %s: %s", command, err)
 		return nil
 	}
+	fmt.Sprintf("The response: %v", resp)
 	return resp
 }
